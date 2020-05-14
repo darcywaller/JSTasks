@@ -1,0 +1,27 @@
+html { /* refers to html part of our script */
+	height: 100%; /* fill ENTIRE screen */
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+/*This is a styling file that determines size/style of elements */
+body {
+	height: 100%;
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	/* background-color: #7F7F7F; */
+	background-color: grey;
+}
+/*  */
+table {
+	height: 100%;
+	width: 100%;
+	margin:0;
+	padding:0;
+	border:0;
+	text-align:center;
+	vertical-align:middle;
+}

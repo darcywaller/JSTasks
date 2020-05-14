@@ -1,0 +1,349 @@
+<!DOCTYPE html> <!--This is a header that tells our editor what language to use-->
+<html> <!--Beginning of our html block of code-->
+<head> <!--beginning of the head section of script, for functions-->
+<!--link our style file-->
+<link rel="stylesheet" href="Stop.css" type="text/css" charset="utf-8"> <!--link doesn't need closing tag-->
+<!--we downloaded the jquery toolbox, now we have to link it here-->
+<script type="text/javascript" src="jquery-3.5.0.min.js"></script>
+<!--Initialise hidden inputs to be sent to server at end of task, hidden age prompt for after task. -->
+<input type="hidden" name="outcomeArray" value="0" id="trialSeq" >
+<input type="hidden" name="practiceOutcomeArray" value="0" id="practTrialSeq" >
+<!-- (OPTIONAL) REFINE LATER: Now, we only log these values to the exported inputs at the end of the task.
+With many participants, losing data for one is probably an acceptable loss, but if we want to save data
+after each trial, we'd have to program this a different way. -->
+
+<!--REFINE LATER: Make age question input  to show at end of task before showing Submit HIT button so we get their age-->
+
+<!--CSS block to hide Turk's HIT submit button until participants finish the task-->
+<style>
+	#submitButton {
+        display: none;
+    }
+</style>
+
+<!--make a new script in javascript-->
+<script type="text/javascript">
+
+// we're now programming in js
+$(document).ready(function(){ // lets us access elements document(created when we download file created on server), ready refers to when this downloading happens
+	//This task flow is organized in functions that do various parts of the task, like our Basicstop.m is organized in nested scripts in MATLAB.
+	//JS is more reactive than MATLAB, and organized to do things following events, as opposed to following a set, timed order (though some 
+	// logic of this script resembles the logic of the MATLAB version of the task). 
+
+    //Fixation, runTrial, playStop, and lateFeedback are strung in sequence. (w/ block breaks triggered in the sequence fcn)
+    //checkResponse is triggered whenever a keypress happens, is not timed inside runTrial
+	
+	//Declare variables and settings for later (variables have to be initiated the first time using "var")
+	var trialNumMain = 300;
+	var trialNumPractice = 24;
+	var trialBlocksMain = 5;
+	var trialBlocksPractice = 1;
+	var SSDtoStart = 250;
+	var leftArrow = "<<"; //REFINE LATER
+	var rightArrow = ">>"; //REFINE LATER
+	var stopSignal = "STOP!"; //REFINE LATER (visual? auditory?) Either way, need SS that doesn't cover/replace GO
+	var taskState = [false,true,false,0,0]; // array that indicates starting task state: no task started, practice needed, no trials made, trialNum, blockNum
+	var respDeadline = 1000; var totTrialTime = 3000;
+    // abbrevs for trialseq array
+    var si = 0; // arrow side
+    var tt = 1; // trial type
+    var lSSD = 2; var rSSD = 3; var acc = 4; var RT = 5; 
+	
+	// we want to present everything in the canvas, so define it here
+	var c = document.getElementById("myCanvas")
+	var ctx = c.getContext("2d"); //define dimensions
+	
+	function showInstructions () 
+	{
+		ctx.clearRect(0, 0, c.width, c.height);
+		ctx.font = "20px Ariel";
+		ctx.fillStyle = "black";
+		ctx.textBaseline="middle";
+		ctx.textAlign="center";
+		ctx.fillText("Respond as fast as you can when you see the arrows.",c.width/2,c.height/2-80);
+		ctx.fillText("Press A if the arrows are pointing left; Press L if they point right.",c.width/2,c.height/2-40);
+		ctx.fillText("If you see the word STOP, try to stop your response and do not press any key.",c.width/2,c.height/2)
+		ctx.fillText("It is equally important to respond quickly as it is to stop when you are able.",c.width/2,c.height/2+40);
+	}
+
+	function startTask()
+	{ // any clicks are directed to this function
+		if (taskState[0]==false)
+		{			
+			{fixation();} // during block breaks, jump back in without remaking trials
+            taskState[0] = true;
+		}
+		return taskState; // update global taskState
+	}
+
+	function runTrial() 
+	{
+        function makeTrials(trialNum){
+            function shuffle(array) {
+                var currentIndex = array.length, temporaryValue, randomIndex;
+                // While there remain elements to shuffle...
+                while (0 !== currentIndex) {
+                // Pick a remaining element...
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex -= 1;
+                // And swap it with the current element.
+                temporaryValue = array[currentIndex];
+                array[currentIndex] = array[randomIndex];
+                array[randomIndex] = temporaryValue;
+                }
+                return array;
+            }
+            var side = new Array(trialNum).fill(-1);
+            for (i=0; i < trialNum; i++){
+                if (i % 2 == 1){side[i]=1;} // if odd trial 
+                else {side[i]=2;}
+            }; shuffle(side); 
+            var trialType = new Array(trialNum).fill(-1);
+            for (i=0; i < trialNum; i++){
+                if (i % 3 != 0) {trialType[i]=0;} // not a third trial = go trial
+                else {trialType[i]=1;} // third trial = stop trial
+            }; shuffle(trialType);
+            var lSSD = new Array(trialNum).fill(250);
+            var rSSD = lSSD;
+            // initialising to a - number so we can catch issues if something goes awry
+            var RT = new Array(trialNum).fill(-1);
+            var acc = RT;
+            var trialSeq = new Array;
+            for (i=0; i<trialNum; i++){
+                var vec = [side[i],trialType[i],lSSD[i],rSSD[i],acc[i],RT[i]];
+                trialSeq.push(vec);
+            }
+            return trialSeq;
+                
+        }
+        // abbrev it
+        if (taskState[1] == true) {trialNum = trialNumPractice;} else {trialNum = trialNumMain;}
+        var it = taskState[3]; var ib = taskState[4];
+        if (taskState[2] == false) {trialSeq = makeTrials(trialNum); taskState[2] = true;}
+
+		if ((it < trialNum) && (it>=0)) // only run if before end of task
+		{
+            if (it>0) { // after first trial
+                // update RT/ACC from last trial
+                trialSeq[it-1][acc] = taskState[7]; trialSeq[it-1][RT] = taskState[8]
+
+                // change SSD
+                if (trialSeq[it-1][tt]==1){
+                    if (taskState[7]==4){
+                        if (trialSeq[it-1][si]==1){
+                            trialSeq[it][lSSD] = trialSeq[it-1][lSSD]+50;
+                            trialSeq[it][rSSD] = trialSeq[it-1][rSSD]; 
+                        }
+                        else {
+                            trialSeq[it][lSSD] = trialSeq[it-1][lSSD];
+                            trialSeq[it][rSSD] = trialSeq[it-1][rSSD]+50; 
+                        }
+                    }
+                    else {
+                        if (trialSeq[it-1][si]==1){
+                            trialSeq[it][lSSD] = trialSeq[it-1][lSSD]-50;
+                            trialSeq[it][rSSD] = trialSeq[it-1][rSSD]; 
+                        }
+                        else {
+                            trialSeq[it][lSSD] = trialSeq[it-1][lSSD];
+                            trialSeq[it][rSSD] = trialSeq[it-1][rSSD]-50; 
+                        }
+                    }
+                }
+                else {
+                    trialSeq[it][lSSD] = trialSeq[it-1][lSSD];
+                    trialSeq[it][rSSD] = trialSeq[it-1][rSSD];
+                }
+            }
+
+			//present go arrow
+			if (trialSeq[it][si]==1){var thisSSD = trialSeq[it][lSSD];} else {var thisSSD = trialSeq[it][rSSD];}
+			ctx.clearRect(0, 0, c.width, c.height); //erase anything drawn before (like clear in ML)
+			ctx.font = "60px Arial";
+			ctx.fillStyle = "black"; 
+			ctx.textBaseline = "middle"; //alignment
+			ctx.textAlign = "center";
+			trialStart = performance.now();
+			if (trialSeq[it][si]==1)
+			{ 
+				ctx.fillText(leftArrow, c.width/2,c.height/2);
+			}
+			else if (trialSeq[it][si]==2)
+			{
+				ctx.fillText(rightArrow, c.width/2,c.height/2);
+			}
+
+			if (trialSeq[it][tt] == 1) {setTimeout(playStop, thisSSD);}			
+			if (trialSeq[it][tt] == 0) {setTimeout(lateFeedback, 1000);}
+			console.log(it,ib,trialNum,trialBlocksMain, (it+1)/(ib+1),(trialNum/trialBlocksMain))
+			var blockBreaks = [60, 120, 180, 240];
+            setTimeout(function(){
+                var it = taskState[3]; var ib = taskState[4];
+                if (taskState[1] == false)
+                    {
+                        if ((!blockBreaks.includes(it+1)) && (it+1 < trialNum)) // if not time for a break or end of task
+                        {
+                            taskState[3]++; //go to next trial
+                            fixation();
+                        }
+						else if (blockBreaks.includes(it+1))// if break time
+						{taskState[3]++;
+                        blockFeedback();}
+
+                        else if (it+1 === trialNum) // if end of task
+                        {runOutro();}
+                    }
+                else if (taskState[1] == true) {
+                    if (it+1 == trialNum) // if end of practice
+                    {
+                        blockFeedbackPractice(); // give post-practice feedback
+                    }
+                    else {taskState[3]++; fixation();} // not end of practice   
+                }
+            },totTrialTime-(performance.now()-trialStart));
+		}
+        // push trial info to taskState for use in global scope
+        if (taskState.length<6) //hasn't been pushed yet
+        {taskState.push(trialSeq[it][si]); taskState.push(trialSeq[it][tt]);}
+        else {taskState[5]=trialSeq[it][si]; taskState[6]=trialSeq[it][tt];}
+
+        return taskState;// return global need-to-know
+        if (taskState[1] == true) {$('#practiceTrialSeq').attr("value",trialSeq);}
+        else {$('#trialSeq').attr("value",trialSeq);}
+	}
+
+	function playStop()
+	{
+		ctx.font = "60px Arial";
+		ctx.fillStyle = "red"; 
+		ctx.textBaseline = "middle"; //alignment
+		ctx.textAlign = "center";
+		ctx.fillText(stopSignal, c.width/2,c.height/2-40);
+	}
+
+    function lateFeedback() {
+		if (taskState[8] > 0){}
+		else {
+		ctx.clearRect(0, 0, c.width, c.height);
+		ctx.font = "60px Arial";
+		ctx.fillStyle = "red"; 
+		ctx.textBaseline = "middle"; //alignment
+		ctx.textAlign = "center";
+		ctx.fillText('Too slow!', c.width/2,c.height/2);
+		}
+	}
+
+	function checkResponse(event) 
+	{
+		key = String.fromCharCode(event.which);
+		// calculate response time
+		var RT = performance.now() - trialStart;
+
+		if (taskState[6] == 0) //acc for go trial
+		{
+			if ((key == 'A') && (taskState[5] == 1)) {var acc=1;} 
+			else if ((key == 'L') && (taskState[5] == 2)) {var acc=1;}
+			else {var acc= 2;}
+		}
+		else if (taskState[6] == 0) // acc for stop trial
+		{
+			if (key != undefined) {var acc=4;} //any key was pressed = failed stop
+			// (OPTIONAL) REFINE LATER: determine key logging options within failed stop conditions
+            //AND find good way to mark Succs at end of trial
+		}
+        // append to taskState array
+        if (taskState.length<8) //hasn't been pushed yet
+        {taskState.push(acc); taskState.push(RT);}
+        else {taskState[7]=acc; taskState[8]=RT;}
+        return taskState; // return global need-to-know info
+	}
+
+	function blockFeedback()
+	{
+		ctx.clearRect(0, 0, c.width, c.height);
+		ctx.font = "20px Ariel";
+		ctx.textBaseline="middle";
+		ctx.textAlign="center";
+        ctx.fillStyle = "black"; 
+        ctx.fillText("You have finished block " + (taskState[4]+1).toString() + " of " + trialBlocksMain.toString() + ".",c.width/2,c.height/2-80);
+		ctx.fillText("Remember to respond as fast as you can to arrows.",c.width/2,c.height/2-40);
+		ctx.fillText("If you are able to stop when you see the word STOP, don't press anything!",c.width/2,c.height/2)
+		ctx.fillText("It is equally important to respond quickly as it is to stop when you are able.",c.width/2,c.height/2+40);
+		ctx.fillText("Click the mouse when you are ready to continue.",c.width/2,c.height/2+80);
+		taskState[4]++;
+        taskState[0] = false; //enable click to start task again
+
+        return taskState;
+
+        {$('#trialSeq').attr("value",trialSeq);}
+	}
+	
+	function blockFeedbackPractice()
+	{
+		taskState[3] = 0; // reset trial counter
+
+		// feedback
+		ctx.clearRect(0, 0, c.width, c.height);
+		ctx.font = "20px Ariel";
+		ctx.textBaseline="middle";
+		ctx.textAlign="center";
+        ctx.fillStyle = "black"; 
+        ctx.fillText("You have finished the practice block.",c.width/2,c.height/2-80);
+		ctx.fillText("Remember to respond as fast as you can to arrows.",c.width/2,c.height/2-40);
+		ctx.fillText("If you are able to stop when you see the word STOP, don't press anything!",c.width/2,c.height/2)
+		ctx.fillText("It is equally important to respond quickly as it is to stop when you are able.",c.width/2,c.height/2+40);
+		ctx.fillText("Click the mouse to begin the main task. There will be 5 blocks with breaks in between.",c.width/2,c.height/2+80);
+		
+		taskState[0] = false; //enable click to start task again
+		taskState[1] = false;
+        taskState[2] = false;
+        // run main block next
+        return taskState;
+        console.log(taskState)
+        {$('#practiceTrialSeq').attr("value",trialSeq);}
+
+	}
+	
+	function runOutro()
+	{
+		ctx.clearRect(0, 0, c.width, c.height);
+		ctx.fillStyle = "black";
+		ctx.fillText("Thanks for participating!", c.width/2,c.height/2-40);	
+		
+		$('#submitButton').show(); // show HIT submit button
+		// REFINE LATER: don't show submit until they enter input for the age question
+
+        if (taskState[1] == true) {$('#practiceTrialSeq').attr("value",trialSeq);}
+        else {$('#trialSeq').attr("value",trialSeq);}
+	}
+	        
+    function fixation(){
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.font = "60px Ariel";
+        ctx.fillStyle = "black";
+        ctx.fillText("+", c.width/2,c.height/2);
+        setTimeout(runTrial,1000);
+    }
+	
+	// checks for mouse clicks in browser
+	document.addEventListener("click",startTask); //this will allow interaction with browser	
+	document.addEventListener("keydown",checkResponse,true);	
+
+	// this is where the actual task starts
+	showInstructions();
+		
+});
+</script>
+</head>
+
+<body> <!--beginning of body section, where visualizables go-->
+	<table> <!--make an empty table on the webpage-->
+		<tr> <!-- it has one row-->
+			<td> <!--one data cell or column-->
+				<!--it will have one item in it, called canvas-->
+				<canvas id="myCanvas" width="1000" height="1000"> </canvas>
+			</td>
+		</tr>
+	</table>
+</body>
+</html>
